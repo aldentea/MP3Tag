@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Aldentea.MP3Tag.RIFF
 {
@@ -41,17 +42,33 @@ namespace Aldentea.MP3Tag.RIFF
 		}
 		#endregion
 
-		public RIFFMP3Tag(BinaryReader reader) : base(DataType, reader)
+		/// <summary>
+		/// 非同期処理用に、引数なしのコンストラクタを用意しました。
+		/// 直後にInitializeAsyncメソッドが呼ばれることを想定しています。
+		/// </summary>
+		public RIFFMP3Tag() : base(DataType)
 		{
+
 		}
 
-		// 03/10/2008 by aldente
-		public new static RIFFMP3Tag ReadFromFile(string srcFileName)
+		//public RIFFMP3Tag(BinaryReader reader) : base(DataType, reader)
+		//{
+		//}
+
+
+		/// <summary>
+		/// ファイルからタグ情報を読み込みます。
+		/// </summary>
+		/// <param name="srcFileName"></param>
+		/// <returns></returns>
+		public static async Task<RIFFMP3Tag> ReadFromFileAsync(string srcFileName)
 		{
-			using (BinaryReader reader = new BinaryReader(new FileStream(srcFileName, FileMode.Open)))
+			var tag = new RIFFMP3Tag();
+			using (var reader = new FileStream(srcFileName, FileMode.Open))
 			{
-				return new RIFFMP3Tag(reader);
+				await tag.InitializeAsync(reader);
 			}
+			return tag;
 		}
 
 		// 03/11/2008 by aldente
@@ -156,9 +173,9 @@ namespace Aldentea.MP3Tag.RIFF
 		#endregion
 
 		// 03/10/2008 by aldente
-		public void WriteTo(string dstFilename)
+		public async Task WriteTo(string dstFilename)
 		{
-			WriteToFile(dstFilename);
+			await WriteToFile(dstFilename);
 		}
 
 		public void Merge(MP3Tag.Base.IID3Tag another_tag)

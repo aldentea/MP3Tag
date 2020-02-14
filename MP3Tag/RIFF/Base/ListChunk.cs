@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Aldentea.MP3Tag.RIFF.Base
 {
@@ -12,6 +13,8 @@ namespace Aldentea.MP3Tag.RIFF.Base
 	{
 		const string list_chunk_name = "LIST";
 
+		// (1.0.0)protectedなプロパティを追加。
+		protected string DataTypeName => data_type.Value;
 		FOURCC data_type = new FOURCC();
 
 		// 03/10/2008 by aldente
@@ -51,21 +54,23 @@ namespace Aldentea.MP3Tag.RIFF.Base
 
 		// 03/10/2008 by aldente
 		#region *コンストラクタ(listChunk:3/4)
-		public ListChunk(string type_name, BinaryReader reader, int data_size)
-			: base(list_chunk_name, reader, data_size)
-		{
-			data_type.Value = type_name;
-		}
+		//public ListChunk(string type_name, BinaryReader reader, int data_size)
+		//	: base(list_chunk_name, reader, data_size)
+		//{
+		//	data_type.Value = type_name;
+		//}
 		#endregion
 
 		// 03/11/2008 by aldente
 		#region *コンストラクタ(listChunk:4/4)
-		public ListChunk(string chunk_id, string type_name, BinaryReader reader, int data_size)
-			: base(chunk_id, reader, data_size)
-		{
-			data_type.Value = type_name;
-		}
+		//public ListChunk(string chunk_id, string type_name, BinaryReader reader, int data_size)
+		//	: base(chunk_id, reader, data_size)
+		//{
+		//	data_type.Value = type_name;
+		//}
 		#endregion
+
+
 
 		// 03/10/2008 by aldente
 		#region *子チャンクを追加(AddChild)
@@ -152,9 +157,9 @@ namespace Aldentea.MP3Tag.RIFF.Base
 		// 03/12/2008 by aldente : readerをBinaryReaderに変更．
 		// 03/10/2008 by aldente
 		#region *[override]本体を読み込み(ReadBody)
-		protected override void ReadBody(BinaryReader reader, int size)
+		public override async Task ReadBody(FileStream reader, int size)
 		{
-			long end_of_chunk = reader.BaseStream.Position + size;
+			long end_of_chunk = reader.Position + size;
 
 			// タイプを読み込む．
 			byte[] buf = new byte[4];
@@ -162,25 +167,27 @@ namespace Aldentea.MP3Tag.RIFF.Base
 			//this.data_type.Value = Encoding.ASCII.GetString(buf);
 			// ※data_typeの検証を入れる．
 
-			while (reader.BaseStream.Position < end_of_chunk)
+			while (reader.Position < end_of_chunk)
 			{
 				Chunk new_child_chunk = null;
 
-				reader.Read(buf, 0, 4);
+				await reader.ReadAsync(buf, 0, 4);
 				string chunk_id = Encoding.ASCII.GetString(buf);
-				//int chunk_data_size = ReadInt32(reader);
-				int chunk_data_size = reader.ReadInt32();
+
+				await reader.ReadAsync(buf, 0, 4);
+				int chunk_data_size = BitConverter.ToInt32(buf, 0);
 
 				if (chunk_id == list_chunk_name)
 				{
-					reader.Read(buf, 0, 4);
+					await reader.ReadAsync(buf, 0, 4);
 					string type_name = Encoding.ASCII.GetString(buf);
 					// タイプ名によって生成するチャンク型を決定．
 					Type new_chunk_type = GetListChunkType(type_name);
 					if (new_chunk_type.IsSubclassOf(typeof(ListChunk)))
 					{
-						new_child_chunk = (Chunk)new_chunk_type.GetConstructor(new Type[] { typeof(string), typeof(BinaryReader), typeof(int) }).Invoke(new object[] { type_name, reader, chunk_data_size - 4 });
-						//new_child_chunk = GenerateChunk(chunk_id);
+						new_child_chunk = (ListChunk)new_chunk_type.GetConstructor(new Type[] { typeof(string) }).Invoke(new object[] { type_name });
+						await new_child_chunk.ReadBody(reader, chunk_data_size - 4);
+
 					}
 				}
 				else
@@ -189,8 +196,8 @@ namespace Aldentea.MP3Tag.RIFF.Base
 					Type new_chunk_type = GetChunkType(chunk_id);
 					if (new_chunk_type.IsSubclassOf(typeof(Chunk)))
 					{
-						new_child_chunk = (Chunk)new_chunk_type.GetConstructor(new Type[] { typeof(string), typeof(BinaryReader), typeof(int) }).Invoke(new object[] { chunk_id, reader, chunk_data_size });
-						//new_child_chunk = GenerateChunk(chunk_id);
+						new_child_chunk = (Chunk)new_chunk_type.GetConstructor(new Type[] { typeof(string) }).Invoke(new object[] { chunk_id });
+						await new_child_chunk.ReadBody(reader, chunk_data_size);
 					}
 				}
 				if (new_child_chunk != null)
@@ -250,7 +257,6 @@ namespace Aldentea.MP3Tag.RIFF.Base
 		{
 			return typeof(ListChunk);
 		}
-
 
 	}
 	#endregion

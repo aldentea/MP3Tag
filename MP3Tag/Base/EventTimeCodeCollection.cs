@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Net; // エンディアン変換のため．
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Aldentea.MP3Tag.Base
 {
@@ -212,7 +213,7 @@ namespace Aldentea.MP3Tag.Base
 
 		// 06/14/2007 by aldente : 移籍にともない，読み込み範囲を縮小．
 		#region *本体を読み込み(ReadBody)
-		public void ReadBody(ID3Reader reader, int size)
+		public async Task ReadBody(ID3Reader reader, int size)
 		{
 			//InitializeTimeUnits();
 
@@ -220,8 +221,8 @@ namespace Aldentea.MP3Tag.Base
 			//int rest_size = size - 1;
 			while (size > 0)
 			{
-				byte type = reader.ReadByte();
-				int time = IPAddress.NetworkToHostOrder(reader.ReadInt32());
+				byte type = await reader.ReadByte();
+				int time = IPAddress.NetworkToHostOrder(await reader.ReadInt32());
 				AddEvent(type, ConvertOut(time));
 				size -= 5;
 			}

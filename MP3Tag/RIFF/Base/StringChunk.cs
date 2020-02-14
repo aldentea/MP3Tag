@@ -1,6 +1,8 @@
 ﻿using System;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
+
 
 namespace Aldentea.MP3Tag.RIFF.Base
 {
@@ -9,11 +11,9 @@ namespace Aldentea.MP3Tag.RIFF.Base
 	public class StringChunk : Chunk
 	{
 		string data = string.Empty;
-		// とりあえずShift-JISで固定．
-		Encoding my_encoding = Encoding.GetEncoding("Shift-JIS");
 
-		public StringChunk(string name, BinaryReader reader, int data_size)
-			: base(name, reader, data_size)
+		public StringChunk(string name)
+			: base(name)
 		{
 		}
 
@@ -33,6 +33,10 @@ namespace Aldentea.MP3Tag.RIFF.Base
 				my_encoding = value;
 			}
 		}
+
+		// とりあえずShift-JISで固定．
+		Encoding my_encoding = Encoding.GetEncoding("Shift-JIS");
+
 		#endregion
 
 		// 03/10/2008 by aldente
@@ -76,20 +80,18 @@ namespace Aldentea.MP3Tag.RIFF.Base
 		}
 		#endregion
 
+		// (1.0.0)非同期処理用メソッド。
 		// 03/10/2008 by aldente
 		#region *[override]本体を読み込み(ReadBody)
-		protected override void ReadBody(BinaryReader reader, int size)
-		{
-			byte[] buf = new byte[size];
-			reader.Read(buf, 0, size);
-			data = my_encoding.GetString(buf).TrimEnd('\0');
 
-			if (size % 2 == 1)
-			{
-				// パディング分だけ読み取り位置を進める．
-				reader.ReadByte();
-			}
+		public override async Task ReadBody(FileStream reader, int size)
+		{
+			int adjusted_size = size % 2 == 1 ? size + 1 : size;
+			byte[] buf = new byte[adjusted_size];
+			await reader.ReadAsync(buf, 0, adjusted_size);
+			data = my_encoding.GetString(buf).TrimEnd('\0');
 		}
+
 		#endregion
 
 		#endregion

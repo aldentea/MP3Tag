@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Aldentea.MP3Tag
 {
@@ -9,9 +10,11 @@ namespace Aldentea.MP3Tag
 
 	// 01/17/2008 by aldente : static化．
 	// 01/08/2008 by aldente
-	#region [static]AldenteMP3TagAccessorクラス
-	public static class AldenteMP3TagAccessor
+	#region [static]MP3TagAccessorクラス
+	public static class MP3TagAccessor
 	{
+
+		// 同期実行版。いるかな？
 
 		// 01/08/2008 by aldente : ～Accessorに移植．
 		// 05/24/2007 by aldente : static化
@@ -23,7 +26,7 @@ namespace Aldentea.MP3Tag
 		/// </summary>
 		/// <param name="filename">読み込むファイル名．</param>
 		/// <returns>該当するバージョンのタグオブジェクト．</returns>
-		public static IID3Tag ReadFile(string fileName)
+		public static async Task<IID3Tag> ReadFile(string fileName)
 		{
 			IID3Tag tag;
 			//SongInfo info = new SongInfo();
@@ -37,13 +40,13 @@ namespace Aldentea.MP3Tag
 			// 拡張子が"rmp"の場合は，RIFFとして開く．
 			if (Path.GetExtension(fileName).ToLower().EndsWith("rmp"))
 			{
-				return RIFFMP3Tag.ReadFromFile(fileName) as RIFFMP3Tag;
+				return await RIFFMP3Tag.ReadFromFileAsync(fileName) as RIFFMP3Tag;
 			}
 			else
 			{
 				// ID3v2をチェック．
-				tag = ID3v2Tag.ReadFile(fileName);
-				ID3v1Tag tag1 = ID3v1Tag.ReadFile(fileName);
+				tag = await ID3v2Tag.ReadFile(fileName);
+				ID3v1Tag tag1 = await ID3v1Tag.ReadFile(fileName);
 				if (tag != null)
 				{
 					if (tag1 != null)
@@ -56,6 +59,7 @@ namespace Aldentea.MP3Tag
 			}
 		}
 		#endregion
+
 
 		// 11/25/2014 by aldentea : 2引数版のバグ(保存がなされていなかった)を修正．
 		// 09/03/2013 by aldentea : 2引数版を用意．
@@ -74,9 +78,9 @@ namespace Aldentea.MP3Tag
 		/// <param name="stoppos">曲の停止位置(秒)．</param>
 		/// <param name="filename">タグを書き込むmp3ファイル名．</param>
 		/// <param name="charCode">文字コードを指定するbyte型数値．現在未使用？</param>
-		public static void UpdateInfo(string title, string artist, decimal sabipos, decimal startpos, decimal stoppos, string filename, byte charCode)
+		public static async Task UpdateInfo(string title, string artist, decimal sabipos, decimal startpos, decimal stoppos, string filename, byte charCode)
 		{
-			IID3Tag tag = ReadFile(filename);
+			IID3Tag tag = await ReadFile(filename);
 			if (tag == null)
 			{
 				tag = new ID3v23Tag();
@@ -87,8 +91,10 @@ namespace Aldentea.MP3Tag
 			tag.StartPos = startpos;
 			tag.StopPos = stoppos;
 
-			tag.WriteTo(filename);
+			await tag.WriteTo(filename);
 		}
+
+
 
 		/// <summary>
 		/// 指定したタグの情報を指定したファイルに書き込みます．
@@ -96,12 +102,12 @@ namespace Aldentea.MP3Tag
 		/// </summary>
 		/// <param name="fileName"></param>
 		/// <param name="newTag"></param>
-		public static void UpdateInfo(string fileName, IID3Tag newTag)
+		public static async Task UpdateInfo(string fileName, IID3Tag newTag)
 		{
-			var original_tag = AldenteMP3TagAccessor.ReadFile(fileName);
+			var original_tag = await MP3TagAccessor.ReadFile(fileName);
 			if (original_tag == null)
 			{
-				newTag.WriteTo(fileName);
+				await newTag.WriteTo(fileName);
 			}
 			else
 			{
@@ -112,12 +118,13 @@ namespace Aldentea.MP3Tag
 				original_tag.SabiPos = newTag.SabiPos;
 				//tag.StartPos = startpos;
 				//tag.StopPos = stoppos;
-				original_tag.WriteTo(fileName);
+				await original_tag.WriteTo(fileName);
 			}
 
 		}
 
 		#endregion
+
 
 		// 09/17/2014 by aldentea
 		#region *[static]冒頭にあるタグのサイズを取得(GetHeaderTagSize)
@@ -127,7 +134,7 @@ namespace Aldentea.MP3Tag
 		/// </summary>
 		/// <param name="fileName"></param>
 		/// <returns></returns>
-		public static int GetHeaderTagSize(string fileName)
+		public static async Task<int> GetHeaderTagSize(string fileName)
 		{
 			// 拡張子が"rmp"の場合は，RIFFとして開く．
 			if (Path.GetExtension(fileName).ToLower().EndsWith("rmp"))
@@ -139,7 +146,7 @@ namespace Aldentea.MP3Tag
 			}
 			else
 			{
-				return ID3v2Tag.GetSize(fileName);
+				return await ID3v2Tag.GetSize(fileName);
 			}
 		}
 		#endregion

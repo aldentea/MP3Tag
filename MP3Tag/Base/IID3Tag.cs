@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Aldentea.MP3Tag.Base
 {
@@ -16,7 +17,7 @@ namespace Aldentea.MP3Tag.Base
 		decimal StartPos { get; set; }
 		decimal StopPos { get; set; }
 
-		void WriteTo(string dstFilename);
+		Task WriteTo(string dstFilename);
 		void Merge(IID3Tag another_tag);
 	}
 	#endregion

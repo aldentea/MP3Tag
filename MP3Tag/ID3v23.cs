@@ -4,7 +4,7 @@ using System.Text;
 using System.Collections;	// for BitArray
 using System.Net;	// エンディアン変換のため．
 using System.IO;
-using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace Aldentea.MP3Tag
 {
@@ -29,34 +29,33 @@ namespace Aldentea.MP3Tag
 		// 05/17/2007 by aldente
 		#region *新規作成用コンストラクタ(ID3v23Tag)
 		public ID3v23Tag()
-			: base()
+			: base(4)
 		{
-			frame_name_size = 4;
 			id_Title = "TIT2";
 			id_Artist = "TPE1";
 		}
 		#endregion
 
 		#region *コンストラクタ(ID3v23Tag)
-		public ID3v23Tag(ID3Reader reader, bool only_header)
-			: base(reader, only_header, 4)
-		{
+		//public ID3v23Tag(ID3Reader reader, bool only_header)
+		//	: base(reader, only_header, 4)
+		//{
 
-			id_Title = "TIT2";
-			id_Artist = "TPE1";
-		}
+		//	id_Title = "TIT2";
+		//	id_Artist = "TPE1";
+		//}
 		#endregion
 
 		// 05/16/2007 by aldente
 		#region *[override]ヘッダの後半を読み込み(ReadHeader)
-		protected override void ReadHeader(ID3Reader reader)
+		protected override async Task ReadHeader(ID3Reader reader)
 		{
-			base.ReadHeader(reader);
+			await base.ReadHeader(reader);
 			if (HaveExtendedHeader)
 			{
 				// ※拡張ヘッダを読み込む．
-				int size = IPAddress.NetworkToHostOrder(reader.ReadInt32());
-				extended_header = reader.ReadBytes(size);
+				int size = await reader.ReadInt32(true);
+				extended_header = await reader.ReadBytes(size);
 			}
 
 		}
@@ -69,26 +68,36 @@ namespace Aldentea.MP3Tag
 		/// <param name="reader"></param>
 		/// <param name="name"></param>
 		/// <returns></returns>
-		protected override int AddFrame(string name, ID3Reader reader)
+		protected override async Task<int> AddFrame(string name, ID3Reader reader)
 		{
 			// イベントタイムコードフレーム
 			if (name == "ETCO")
 			{
-				return frames.Add(new ID3v23EventTimeCodeFrame(name, reader));
+				// とりあえずTimeUnitを決め打ちにする。
+				var tag = new ID3v23EventTimeCodeFrame(name, TimeUnit.Milliseconds);
+				await tag.Initialize(reader);
+				return frames.Add(tag);
 			}
 			// テキストフレーム
 			if (name[0] == 'T')
 			{
 				if (name != "TXXX")
 				{
-					return frames.Add(new ID3v23StringFrame(name, reader, true));
+					var tag = new ID3v23StringFrame(name, true);
+					await tag.Initialize(reader);
+					return frames.Add(tag);
 				}
 				else
 				{
 					return 0;
 				}
 			}
-			return frames.Add(new ID3v23BinaryFrame(name, reader));
+			else
+			{
+				var tag = new ID3v23BinaryFrame(name);
+				await tag.Initialize(reader);
+				return frames.Add(tag);
+			}
 		}
 		#endregion
 
@@ -226,7 +235,7 @@ namespace Aldentea.MP3Tag
 				f_flags.SetAll(false);
 			}
 			#endregion
-
+/*
 			#region *コンストラクタ(ID3v23Frame:2/2)
 			public ID3v23Frame(string name, ID3Reader reader)
 				: base(name)
@@ -240,6 +249,21 @@ namespace Aldentea.MP3Tag
 				ReadBody(reader, size);
 			}
 			#endregion
+*/
+			// ↑のコンストラクタを廃止して、Initializeメソッドにする。
+
+			public async Task Initialize(ID3Reader reader)
+			{
+				// サイズ読み込み→エンディアン変換
+				int size = await reader.ReadInt32(true);
+				// フラグ読み込み
+				s_flags = new BitArray(await reader.ReadBytes(1));
+				f_flags = new BitArray(await reader.ReadBytes(1));
+				// 本体読み込み
+				await ReadBody(reader, size);
+
+			}
+
 
 			//protected abstract void ReadBody(ID3Reader reader, int size);
 
@@ -363,16 +387,16 @@ namespace Aldentea.MP3Tag
 			#endregion
 
 			#region *コンストラクタ(ID3v23BinaryFrame:2/2)
-			public ID3v23BinaryFrame(string name, ID3Reader reader)
-				: base(name, reader)
-			{
-			}
+			//public ID3v23BinaryFrame(string name, ID3Reader reader)
+			//	: base(name, reader)
+			//{
+			//}
 			#endregion
 
 			#region *[override]フレームの本体を読み込み(ReadBody)
-			protected override void ReadBody(ID3Reader reader, int size)
+			protected override async Task ReadBody(ID3Reader reader, int size)
 			{
-				content = reader.ReadBytes(size);
+				content = await reader.ReadBytes(size);
 			}
 			#endregion
 
@@ -427,17 +451,17 @@ namespace Aldentea.MP3Tag
 			#endregion
 
 			#region *コンストラクタ(ID3v23StringFrame:2/2)
-			public ID3v23StringFrame(string name, ID3Reader reader, bool use_sjis)
-				: base(name, reader)
-			{
-			}
+			//public ID3v23StringFrame(string name, ID3Reader reader, bool use_sjis)
+			//	: base(name, reader)
+			//{
+			//}
 			#endregion
 
 			#region *[override]フレームの本体を読み込み(ReadBody)
-			protected override void ReadBody(ID3Reader reader, int size)
+			protected override async Task ReadBody(ID3Reader reader, int size)
 			{
 				encoder = new StringFrameEncoder(use_sjis);
-				value = encoder.Decode(reader.ReadBytes(size));
+				value = encoder.Decode(await reader.ReadBytes(size));
 			}
 			#endregion
 
@@ -577,10 +601,10 @@ namespace Aldentea.MP3Tag
 			#endregion
 
 			#region *コンストラクタ(ID3v23EventFrame:2/2)
-			public ID3v23EventTimeCodeFrame(string name, ID3Reader reader)
-				: base(name, reader)
-			{
-			}
+			//public ID3v23EventTimeCodeFrame(string name, ID3Reader reader)
+			//	: base(name, reader)
+			//{
+			//}
 			#endregion
 
 			#region *時間の単位を初期化(InitializeTimeUnits)
@@ -593,12 +617,12 @@ namespace Aldentea.MP3Tag
 			#endregion
 
 			#region *[override]本体を読み込み(ReadBody)
-			protected override void ReadBody(ID3Reader reader, int size)
+			protected override async Task ReadBody(ID3Reader reader, int size)
 			{
 				InitializeTimeUnits();
-				this.TimeStampUnit = (TimeUnit)event_time_units[reader.ReadByte()];
+				this.TimeStampUnit = (TimeUnit)event_time_units[await reader.ReadByte()];
 
-				event_time_collection.ReadBody(reader, size - 1);
+				await event_time_collection.ReadBody(reader, size - 1);
 			}
 			#endregion
 

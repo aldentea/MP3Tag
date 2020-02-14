@@ -4,6 +4,9 @@ using System.Text;
 using System.IO;
 using System.Text.RegularExpressions;
 
+using System.Threading.Tasks;
+using System.Linq;
+
 namespace Aldentea.MP3Tag.Base
 {
 	// 12/25/2007 by aldente : Mergeメソッドを追加．
@@ -201,25 +204,30 @@ namespace Aldentea.MP3Tag.Base
 		}
 		#endregion
 
-		#region *コンストラクタ(ID3v1Tag)
-		public ID3v1Tag(BinaryReader reader, bool alreadyReadIdentifier)
+		//#region *コンストラクタ(ID3v1Tag)
+		//public ID3v1Tag(BinaryReader reader, bool alreadyReadIdentifier)
+		//{
+		//	Read(reader, alreadyReadIdentifier);
+		//}
+		//#endregion
+
+		public async Task Initialize(FileStream reader, bool alreadyReadIdentifier)
 		{
-			Read(reader, alreadyReadIdentifier);
+			await Read(reader, alreadyReadIdentifier);
 		}
-		#endregion
 
 		// 05/15/2007 by aldente
 		#region *[static]ファイルにID3v1タグが存在するか否か(Exists)
-		public static bool Exists(string filename)
+		public static async Task<bool> Exists(string filename)
 		{
 			//if (!File.Exists(filename))
 			//{
 			//  throw new FileNotFoundException();
 			//}
 
-			using (BinaryReader reader = new BinaryReader(new FileStream(filename, FileMode.Open)))
+			using (FileStream reader = new FileStream(filename, FileMode.Open, FileAccess.Read))
 			{
-				return Exists(reader);
+				return await Exists(reader);
 			}
 
 		}
@@ -233,17 +241,18 @@ namespace Aldentea.MP3Tag.Base
 		/// </summary>
 		/// <param name="reader"></param>
 		/// <returns></returns>
-		protected static bool Exists(BinaryReader reader)
+		protected static async Task<bool> Exists(FileStream reader)
 		{
 			// 末尾128バイトを読み込む．
-			FileInfo info = new FileInfo(((FileStream)reader.BaseStream).Name);
+			FileInfo info = new FileInfo(reader.Name);
 			long size = info.Length;
 			if (size < 128)
 			{
 				return false;
 			}
-			reader.BaseStream.Seek(size - 128, SeekOrigin.Begin);
-			byte[] buf = reader.ReadBytes(3);
+			reader.Seek(size - 128, SeekOrigin.Begin);
+			byte[] buf = new byte[3];
+			await reader.ReadAsync(buf, 0, 3);
 			return (Encoding.ASCII.GetString(buf) == "TAG");
 		}
 		#endregion
@@ -272,22 +281,24 @@ namespace Aldentea.MP3Tag.Base
 		/// </summary>
 		/// <param name="filename">ID3v1を読み込むファイルの名前．</param>
 		/// <returns>ID3v1Tagオブジェクト．タグが見つからなければnull．</returns>
-		public static ID3v1Tag ReadFile(string filename)
+		public static async Task<ID3v1Tag> ReadFile(string filename)
 		{
-			using (BinaryReader reader = new BinaryReader(new FileStream(filename, FileMode.Open)))
+			using (var reader = new FileStream(filename, FileMode.Open, FileAccess.Read))
 			{
-				return Read(reader);
+				return await Read(reader);
 			}
 		}
 		#endregion
 
 
 		#region *[static]ID3v1タグを読み込み(Read)
-		public static ID3v1Tag Read(BinaryReader reader)
+		public static async Task<ID3v1Tag> Read(FileStream reader)
 		{
-			if (Exists(reader))
+			if (await Exists(reader))
 			{
-				return new ID3v1Tag(reader, true);
+				var tag = new ID3v1Tag();
+				await tag.Initialize(reader, true);
+				return tag;
 			}
 			else
 			{
@@ -299,26 +310,24 @@ namespace Aldentea.MP3Tag.Base
 
 		// 04/04/2007 by aldente
 		#region *読み込み(Read)
-		protected void Read(BinaryReader reader, bool alreadyReadIdentifier)
+		protected async Task Read(FileStream reader, bool alreadyReadIdentifier)
 		{
 			if (!alreadyReadIdentifier)
 			{
 				// 最初の3バイト("TAG")をスキップする．
-				reader.ReadBytes(3);
+				reader.Seek(3, SeekOrigin.Current);
 			}
 
-
+			byte[] tag = new byte[125];
+			await reader.ReadAsync(tag, 0, 125);
 			// title
-			byte[] buf = reader.ReadBytes(30);
-			title = GetString(buf);
+			title = GetString(tag.Take(30).ToArray());
 			// artist
-			buf = reader.ReadBytes(30);
-			artist = GetString(buf);
+			artist = GetString(tag.Skip(30).Take(30).ToArray());
 			// album_name
-			buf = reader.ReadBytes(30);
-			album_name = GetString(buf);
+			album_name = GetString(tag.Skip(60).Take(30).ToArray());
 			// year
-			buf = reader.ReadBytes(4);
+			var buf = tag.Skip(90).Take(4).ToArray();
 			try
 			{
 				year = Convert.ToInt32(GetString(buf));
@@ -328,14 +337,14 @@ namespace Aldentea.MP3Tag.Base
 				year = 0;
 			}
 			// comment
-			buf = reader.ReadBytes(30);
-			if (buf[28] == 0x00 && buf[29] != 0x00)
+			var comment_buf = tag.Skip(94).Take(30).ToArray();
+			if (comment_buf[28] == 0x00 && comment_buf[29] != 0x00)
 			{
 				// ID3v1.1
-				track_no = buf[29];
+				track_no = comment_buf[29];
 			}
-			comment = GetString(buf);
-			genre_no = reader.ReadByte();
+			comment = GetString(comment_buf);
+			genre_no = tag[124];
 		}
 		#endregion
 
@@ -383,28 +392,30 @@ namespace Aldentea.MP3Tag.Base
 		/// 既存のタグは上書きされます．
 		/// </summary>
 		/// <param name="dstFilename">書き込み先のファイル名．</param>
-		public void WriteTo(string dstFilename)
+		public async Task WriteTo(string dstFilename)
 		{
 			if (!File.Exists(dstFilename))
 			{
 				// どうしてくれよう？
 			}
 
-			//string tempFilename = "namunamu.mp3";
 			string tempFilename = Path.GetTempFileName();
-			using (BinaryReader reader = new BinaryReader(new FileStream(dstFilename, FileMode.Open)))
+			using (var reader = new FileStream(dstFilename, FileMode.Open, FileAccess.Read))
 			{
-				bool exists = Exists(reader);
+				bool exists = await Exists(reader);
 
-				using (BinaryWriter writer = new BinaryWriter(new FileStream(tempFilename, FileMode.CreateNew)))
+				using (var writer = new FileStream(tempFilename, FileMode.CreateNew, FileAccess.Write))
 				{
-					reader.BaseStream.Seek(0, SeekOrigin.Begin);
-					writer.Write(reader.ReadBytes(Convert.ToInt32(reader.BaseStream.Length - (exists ? 128 : 0))));
-					writer.Write(this.GetBytes());
+					reader.Seek(0, SeekOrigin.Begin);
+					var contents_size = Convert.ToInt32(reader.Length - (exists ? 128 : 0));
+					var contents = new byte[contents_size];
+					await reader.ReadAsync(contents, 0, contents_size);
+					await writer.WriteAsync(contents, 0, contents_size);
+					await writer.WriteAsync(this.GetBytes(), 0, 128);	// 長さは決め打ちで問題ないと信じる。
 				}
 			}
 			File.Delete(dstFilename);
-			File.Move(tempFilename, dstFilename);
+			File.Move(tempFilename, dstFilename);	// このあたり大丈夫かな…Moveに失敗するような状況であればDeleteも失敗すると信じているが。
 		}
 		#endregion
 

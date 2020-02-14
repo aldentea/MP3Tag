@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Aldentea.MP3Tag.RIFF.Base
 {
@@ -45,11 +46,16 @@ namespace Aldentea.MP3Tag.RIFF.Base
 		/// 
 		/// </summary>
 		/// <param name="reader"></param>
-		public Chunk(string name, BinaryReader reader, int data_size) : this(name)
-		{
-			ReadBody(reader, data_size);
-		}
+		//public Chunk(string name, BinaryReader reader, int data_size) : this(name)
+		//{
+		//	ReadBody(reader, data_size);
+		//}
 		#endregion
+
+		public async Task Initialize(FileStream reader, int dataSize)
+		{
+			await ReadBody(reader, dataSize);
+		}
 
 		// 03/07/2008 by aldente
 		#region *[abstract]データサイズを取得(GetDataSize)
@@ -158,23 +164,27 @@ namespace Aldentea.MP3Tag.RIFF.Base
 				}
 				#endregion
 		*/
-		protected abstract void ReadBody(BinaryReader reader, int size);
+
+		public virtual async Task ReadBody(FileStream reader, int size)
+		{
+			throw new NotImplementedException("Chunkを継承するクラスは、ReadBodyAsyncメソッドをオーバーライドして下さい。");
+		}
 
 		// 03/10/2008 by aldente
 		#region *チャンクを書き込み(Write)
-		public void Write(Stream writer)
+		public async Task Write(Stream writer)
 		{
 			// 識別子を書き込む．
-			writer.Write(name.GetBytes(), 0, 4);
+			await writer.WriteAsync(name.GetBytes(), 0, 4);
 			// サイズを書き込む．
-			writer.Write(GetDataSizeBytes(), 0, 4);
+			await writer.WriteAsync(GetDataSizeBytes(), 0, 4);
 			// 中身を書き込む．
 			int size = GetDataSize();
-			writer.Write(GetDataBytes(), 0, size);
+			await writer.WriteAsync(GetDataBytes(), 0, size);
 			if (size % 2 == 1)
 			{
 				// パディングを行う．
-				writer.WriteByte(0x00);
+				await writer.WriteAsync(new byte[] { 0x00 });
 			}
 		}
 		#endregion

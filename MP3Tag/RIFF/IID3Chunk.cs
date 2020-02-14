@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Aldentea.MP3Tag.RIFF
 {
@@ -26,6 +27,7 @@ namespace Aldentea.MP3Tag.RIFF
 		}
 		#endregion
 
+		/*
 		// 03/12/2008 by aldente
 		#region *コンストラクタ(IID3Chunk)
 		public IID3Chunk(string name, BinaryReader reader, int data_size)
@@ -38,6 +40,7 @@ namespace Aldentea.MP3Tag.RIFF
 			}
 		}
 		#endregion
+	*/
 
 		#region abstract実装
 
@@ -54,9 +57,9 @@ namespace Aldentea.MP3Tag.RIFF
 		}
 
 		// 03/12/2008 by aldente
-		protected override void ReadBody(BinaryReader reader, int size)
+		public override async Task ReadBody(FileStream reader, int size)
 		{
-			tag = MP3Tag.Base.ID3v1Tag.Read(reader);
+			tag = await MP3Tag.Base.ID3v1Tag.Read(reader);
 		}
 
 		#endregion

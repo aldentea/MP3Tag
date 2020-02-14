@@ -5,7 +5,7 @@ using System.Collections;	// for BitArray
 using System.Net;	// エンディアン変換のため．
 using System.IO;
 using System.Text.RegularExpressions;
-
+using System.Threading.Tasks;
 
 namespace Aldentea.MP3Tag
 {
@@ -17,7 +17,7 @@ namespace Aldentea.MP3Tag
 	{
 		protected static int base_header_size = 10;
 		//protected static int frame_name_size;
-		protected int frame_name_size;
+		protected readonly int frame_name_size;
 		protected static bool use_sjis = true;
 
 		protected int size;
@@ -174,12 +174,14 @@ namespace Aldentea.MP3Tag
 		protected delegate void InitializeFrameDelegater();
 
 		#region *新規作成用コンストラクタ(ID3v2Tag)
-		public ID3v2Tag()
+		protected ID3v2Tag(int frameNameSize)
 		{
+			this.frame_name_size = frameNameSize;
 			flags = new BitArray(8);	// falseに初期設定される．
 		}
 		#endregion
 
+		/*
 		// 05/17/2007 by aldente : only_header引数を追加．
 		#region *コンストラクタ(ID3v2Tag)
 		/// <summary>
@@ -196,22 +198,31 @@ namespace Aldentea.MP3Tag
 				ReadFrames(reader);
 			}
 		}
-		#endregion
+		*/
+		// ↑このコンストラクタを廃止して、Initializeメソッドにする？
+
+		protected async Task Initialize(ID3Reader reader, bool onlyHeader)
+		{
+			// これはコンストラクタで行う。
+			//this.frame_name_size = frameNameSize;
+			await ReadHeader(reader);
+			if (!onlyHeader)
+			{
+				await ReadFrames(reader);
+			}
+
+		}
+
+		//#endregion
 
 		// 05/16/2007 by aldente
 		#region *[static]ファイルにID3v2タグが存在するか否か(Exists)
-		public static bool Exists(string filename)
+		public static async Task<bool> Exists(string filename)
 		{
-			//if (!File.Exists(filename))
-			//{
-			//  throw new FileNotFoundException();
-			//}
-
-			using (BinaryReader reader = new BinaryReader(new FileStream(filename, FileMode.Open)))
+			using (ID3Reader reader = new ID3Reader(filename))
 			{
-				return Exists(reader);
+				return await Exists(reader);
 			}
-
 		}
 		#endregion
 
@@ -222,11 +233,11 @@ namespace Aldentea.MP3Tag
 		/// </summary>
 		/// <param name="reader"></param>
 		/// <returns></returns>
-		protected static bool Exists(BinaryReader reader)
+		protected static async Task<bool> Exists(ID3Reader reader)
 		{
 			// 先頭3バイトを読み込む．
-			reader.BaseStream.Seek(0, SeekOrigin.Begin);
-			byte[] buf = reader.ReadBytes(3);
+			reader.Seek(0, SeekOrigin.Begin);
+			byte[] buf = await reader.ReadBytes(3);
 			return (Encoding.ASCII.GetString(buf) == "ID3");
 		}
 		#endregion
@@ -251,19 +262,20 @@ namespace Aldentea.MP3Tag
 
 		// 05/16/2007 by aldente : virtualに変更(拡張タグを読み込むため)．
 		#region *[virtual]ヘッダの後半を読み込み(ReadHeader)
-		protected virtual void ReadHeader(ID3Reader reader)
+		protected virtual async Task ReadHeader(ID3Reader reader)
 		{
-			flags = new BitArray(reader.ReadBytes(1));
-			size = reader.Read4ByteSynchsafeInteger();
+
+			flags = new BitArray(await reader.ReadBytes(1));
+			size = await reader.Read4ByteSynchsafeInteger();
 		}
 		#endregion
 
 		#region *全フレーム読み込み(ReadFrames)
-		protected void ReadFrames(ID3Reader reader)
+		protected async Task ReadFrames(ID3Reader reader)
 		{
-			while (reader.BaseStream.Position < size + base_header_size)
+			while (reader.Position < size + base_header_size)
 			{
-				if (!ReadFrame(reader))
+				if (!await ReadFrame(reader))
 				{
 					break;
 				}
@@ -272,10 +284,10 @@ namespace Aldentea.MP3Tag
 		#endregion
 
 		#region *1つのフレームを読み込み(ReadFrame)
-		protected bool ReadFrame(ID3Reader reader)
+		protected async Task<bool> ReadFrame(ID3Reader reader)
 		{
 			// フレーム名を読み込む．
-			string name = Encoding.ASCII.GetString(reader.ReadBytes(frame_name_size));
+			string name = Encoding.ASCII.GetString(await reader.ReadBytes(frame_name_size));
 			//string name = Encoding.ASCII.GetString(reader.ReadBytes((int)this.GetType().GetField("frame_name_size", System.Reflection.BindingFlags.FlattenHierarchy).GetValue(null)));
 			// "The frame ID made out of the characters capital A-Z and 0-9."
 			// なんだけど，半角空白を使う人がいるようなので，一応それにも対応しておく．
@@ -286,12 +298,12 @@ namespace Aldentea.MP3Tag
 				return false;
 			}
 
-			AddFrame(name, reader);
+			await AddFrame(name, reader);
 			return true;
 		}
 		#endregion
 
-		protected abstract int AddFrame(string name, ID3Reader reader);
+		protected abstract Task<int> AddFrame(string name, ID3Reader reader);
 
 		// 05/17/2007 by aldente
 		#region *文字列フレームを追加(AddFrame:2/3)
@@ -373,15 +385,15 @@ namespace Aldentea.MP3Tag
 
 		// 09/17/2014 by aldentea
 		#region *[static]ファイルからタグ全体のサイズを取得(GetSize)
-		public static int GetSize(string filename)
+		public static async Task<int> GetSize(string filename)
 		{
-			using (ID3Reader reader = new ID3Reader(File.Open(filename, FileMode.Open)))
+			using (ID3Reader reader = new ID3Reader(filename))
 			{
-				if (!Exists(reader))
+				if (! await Exists(reader))
 				{
 					return 0;
 				}
-				return Generate(reader, true).size;
+				return (await Generate(reader, true)).size;
 			}
 		}
 		#endregion
@@ -394,15 +406,15 @@ namespace Aldentea.MP3Tag
 		/// </summary>
 		/// <param name="filename">ID3v2を読み込むファイルの名前．</param>
 		/// <returns>ID3v2Tagオブジェクト．タグが見つからなければnull．</returns>
-		public static ID3v2Tag ReadFile(string filename)
+		public static async Task<ID3v2Tag> ReadFile(string filename)
 		{
-			using (ID3Reader reader = new ID3Reader(File.Open(filename, FileMode.Open)))
+			using (ID3Reader reader = new ID3Reader(filename))
 			{
-				if (!Exists(reader))
+				if (!await Exists(reader))
 				{
 					return null;
 				}
-				return Generate(reader, false);
+				return await Generate(reader, false);
 			}
 		}
 		#endregion
@@ -413,22 +425,29 @@ namespace Aldentea.MP3Tag
 		/// ヘッダのバージョン番号を読み取り，タグオブジェクトを生成します．
 		/// </summary>
 		/// <param name="reader"></param>
-		/// <param name="only_header"></param>
+		/// <param name="onlyHeader"></param>
 		/// <returns></returns>
-		private static ID3v2Tag Generate(ID3Reader reader, bool only_header)
+		private static async Task<ID3v2Tag> Generate(ID3Reader reader, bool onlyHeader)
 		{
 			// readerは"ID3"まで読み取ったものとする．
-			byte[] version = reader.ReadBytes(2);
+			byte[] version = new byte[2];
+			await reader.ReadAsync(version, 0, 2);
 			switch (version[0])
 			{
 				case 0x02:
-					return new ID3v22Tag(reader, only_header);
+					{
+						var tag = new ID3v22Tag();
+						await tag.Initialize(reader, onlyHeader);
+						return tag;
+					}
 				case 0x03:
-					return new ID3v23Tag(reader, only_header);
+					{
+						var tag = new ID3v23Tag();
+						await tag.Initialize(reader, onlyHeader);
+						return tag;
+					}
 				case 0x04:
-					throw new ApplicationException("残念ながらまだ未対応ですm(_ _)m");
-				//tag = new ID3v23Tag();
-				//break;
+					throw new ApplicationException("残念ながら未対応ですm(_ _)m");
 				default:
 					throw new ApplicationException("見たことないバージョンでチュね～");
 			}
@@ -542,47 +561,48 @@ namespace Aldentea.MP3Tag
 		/// 既存のタグは上書きされます．
 		/// </summary>
 		/// <param name="dstFilename">書き込み先のファイル名．</param>
-		public void WriteTo(string dstFilename)
+		public async Task WriteTo(string dstFilename)
 		{
 			if (!File.Exists(dstFilename))
 			{
 				// どうしてくれよう？
 			}
 
-			bool v1_exists = ID3v1Tag.Exists(dstFilename);
+			bool v1_exists = await ID3v1Tag.Exists(dstFilename);
 
 			//string tempFilename = "namunamu.mp3";
 			string tempFilename = Path.GetTempFileName();
 
-			using (ID3Reader reader = new ID3Reader(new FileStream(dstFilename, FileMode.Open)))
+			using (var reader = new ID3Reader(dstFilename))
 			{
-				bool exists = Exists(reader);
-				int old_tag_size = exists ? Generate(reader, true).GetTotalSize() : 0;
+				bool exists = await Exists(reader);
+				int old_tag_size = exists ? (await Generate(reader, true)).GetTotalSize() : 0;
 
 				// 11/10/2008 by aldente
 				// FileModeをCreateNewからCreateに変更．
-				using (BinaryWriter writer = new BinaryWriter(new FileStream(tempFilename, FileMode.Create)))
+				using (var writer = new FileStream(tempFilename, FileMode.Create, FileAccess.Write))
 				{
-					ID3v1Tag v1Tag;
+					ID3v1Tag v1Tag = new ID3v1Tag();
 					// タグを書き込む．
-					writer.Write(this.GetBytes(this.char_code, 0x100));
+					await writer.WriteAsync(this.GetBytes(this.char_code, 0x100));
 					// 本体を書き込む．
-					reader.BaseStream.Seek(old_tag_size, SeekOrigin.Begin);
+					reader.Seek(old_tag_size, SeekOrigin.Begin);
 					if (v1_exists)
 					{
-						writer.Write(reader.ReadBytes((int)reader.BaseStream.Length - old_tag_size - 128));
-						v1Tag = new ID3v1Tag(reader, false);
+						var contents = await reader.ReadBytes((int)reader.Length - old_tag_size - 128);
+						await writer.WriteAsync(contents);
+						await v1Tag.Initialize(reader, false);
 					}
 					else
 					{
-						writer.Write(reader.ReadBytes((int)reader.BaseStream.Length - old_tag_size));
-						v1Tag = new ID3v1Tag();
+						var contents = await reader.ReadBytes((int)reader.Length - old_tag_size);
+						await writer.WriteAsync(contents);
 					}
 					// ID3v1タグを書き込む．
 					v1Tag.Title = this.Title;
 					v1Tag.Artist = this.Artist;
 					byte[] buf = v1Tag.GetBytes();
-					writer.Write(buf, 0, buf.Length);
+					await writer.WriteAsync(buf, 0, buf.Length);
 
 				}
 			}
@@ -681,7 +701,7 @@ namespace Aldentea.MP3Tag
 			#endregion
 
 			protected delegate void GetBodyDelegater(out byte[] body);
-			protected abstract void ReadBody(ID3Reader reader, int size);
+			protected abstract Task ReadBody(ID3Reader reader, int size);
 			public abstract byte[] GetBytes();
 
 		}

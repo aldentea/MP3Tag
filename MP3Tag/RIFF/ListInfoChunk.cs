@@ -78,6 +78,7 @@ namespace Aldentea.MP3Tag.RIFF
 		{
 		}
 
+		/*
 		// 03/11/2008 by aldente
 		public ListInfoChunk(BinaryReader reader, int data_size)
 			: base(DataType, reader, data_size)
@@ -89,7 +90,7 @@ namespace Aldentea.MP3Tag.RIFF
 			: base(data_type, reader, data_size)
 		{
 		}
-
+		*/
 
 		// 03/10/2008 by aldente
 		protected override Type GetChunkType(string id)
