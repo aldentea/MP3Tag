@@ -16,7 +16,16 @@ namespace Aldentea.MP3Tag.Base
 		public StringFrameEncoder(bool use_sjis)
 		{
 			//this.use_sjis = use_sjis;
-			encodings.Add(use_sjis ? Encoding.GetEncoding("Shift_JIS") : Encoding.GetEncoding("Latin-1"));
+			if (use_sjis)
+			{
+				Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+				encodings.Add(Encoding.GetEncoding("Shift_JIS"));
+			}
+			//else
+			//{
+			//	encodings.Add(Encoding.GetEncoding("Latin-1"));
+			//}
+
 			encodings.Add(Encoding.Unicode);
 		}
 		#endregion
